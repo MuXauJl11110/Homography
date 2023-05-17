@@ -3,8 +3,6 @@ from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
-from scipy.cluster import hierarchy
-from scipy.spatial import distance
 
 
 def get_lines(
@@ -91,36 +89,6 @@ def get_distance(point: Tuple[float, float], line: List[Tuple[float, float]]):
     p_x, p_y = rho * np.cos(theta), rho * np.sin(theta)
 
     return abs(np.cos(theta) * (p_y - point[1]) - np.sin(theta) * (p_x - point[0]))
-
-
-# https://stackoverflow.com/questions/15780210/python-opencv-detect-parallel-lines
-def find_parallel_lines(
-    lines: List[List[Tuple[float, float]]],
-    filter_num: Optional[int] = None,
-) -> List[List[List[Tuple[float, float]]]]:
-    lines_ = lines[:, 0, :]
-    angle = lines_[:, 1]
-
-    # Perform hierarchical clustering
-
-    angle_ = angle[..., np.newaxis]
-    y = distance.pdist(angle_)
-    Z = hierarchy.ward(y)
-    cluster = hierarchy.fcluster(Z, 0.5, criterion="distance")
-
-    parallel_lines = []
-    for i in range(cluster.min(), cluster.max() + 1):
-        temp = lines[np.where(cluster == i)]
-        # Removing extra lines
-        # (we might get many lines, so we are going to take only random filter_num lines
-        # for further computation because more than this number of lines will only
-        # contribute towards slowing down searching orthogonal lines.
-        if filter_num is not None:
-            parallel_lines.append(random.choices(temp, k=filter_num))
-        else:
-            parallel_lines.append(temp)
-
-    return parallel_lines
 
 
 def find_orthogonal_lines(
