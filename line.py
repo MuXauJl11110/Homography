@@ -3,6 +3,9 @@ from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
+from matplotlib import cm
+from matplotlib import pyplot as plt
+from skimage.transform import hough_line, hough_line_peaks
 
 
 def get_lines(
@@ -10,7 +13,7 @@ def get_lines(
     rho: Optional[float] = 1,
     theta: Optional[float] = np.pi / 180,
     threshold: Optional[int] = 200,
-    lines: Optional[int] = 10,
+    lines: Optional[int] = 100,
     srn: Optional[int] = 15,
 ) -> List[List[Tuple[float, float]]]:
     # Converting to grayscale
@@ -29,6 +32,21 @@ def get_lines(
         print("get_lines: Not enough lines found in the image.")
 
     return lines
+
+
+def get_lines_skimage(
+    image: np.ndarray,
+    angle_from: Optional[float] = -np.pi / 4,
+    angle_to: Optional[float] = np.pi / 4,
+) -> Tuple[np.ndarray, np.ndarray]:
+    # Finding Lines in the image
+    hspace_all, theta_all, rho_all = hough_line(image, theta=np.linspace(angle_from, angle_to, 90))
+    # Finding most prominent lines separated by a certain angle and distance
+    _, theta_selected, ro_selected = hough_line_peaks(
+        hspace_all, theta_all, rho_all, min_distance=9, min_angle=1, threshold=None, num_peaks=20
+    )
+
+    return np.array(theta_selected), np.array(ro_selected)
 
 
 def filter_lines(
@@ -69,9 +87,52 @@ def draw_line(
     return image
 
 
+def draw_lines(image: np.ndarray, clusters: Optional[List[bool]]):
+    """Draw lines on grayscale image on subplot's ax"""
+    ymax, xmax = image.shape
+    plt.figure(figsize=(8, 5))
+    plt.imshow(image, cmap=cm.gray)
+
+    def get_cmap(n, name="nipy_spectral"):
+        """Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
+        RGB color; the keyword argument name must be a standard mpl colormap name."""
+        return plt.cm.get_cmap(name, n)
+
+    def get_line(line):
+        [(theta, rho)] = line
+        # y = kx + b
+        k, b = get_kb(theta, rho)
+        x = np.linspace(0, xmax)
+        y = k * x + b
+        x, y = x[y < ymax], y[y < ymax]
+        x, y = x[y > 0], y[y > 0]
+
+        return x, y
+
+    cmap = get_cmap(len(clusters))
+    for c, lines in clusters.items():
+        for line in lines[:-1]:
+            x, y = get_line(line)
+            color = cmap(c)
+            plt.plot(x, y, color=color)
+        x, y = get_line(lines[-1])
+        color = cmap(c)
+        plt.plot(x, y, color=color, label=f"{c}")
+    plt.legend()
+    plt.show()
+
+
+def get_kb(theta: float, rho: float):
+    # y = kx + b
+    k = np.inf if np.tan(theta) == 0 else -1 / np.tan(theta)
+    b = np.inf if np.sin(theta) == 0 else rho / np.sin(theta)
+
+    return k, b
+
+
 def get_homogeneous_coordinates(line: List[Tuple[float, float]]) -> List[float]:
     [(rho, theta)] = line
-    return [np.cos(theta), np.sin(theta), -rho]
+    return [np.round(np.cos(theta), 10), np.round(np.sin(theta), 10), -rho]
 
 
 def get_intersection_point(line1: List[Tuple[float, float]], line2: List[Tuple[float, float]]) -> List[float]:
